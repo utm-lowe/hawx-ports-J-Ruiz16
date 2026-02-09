@@ -140,7 +140,7 @@
 // The global collection of ports
 struct port ports[NPORT];
 
-
+//Copilot and ChatGPT helped me implement 
 // Initialize the ports
 void 
 port_init(void)
@@ -156,7 +156,20 @@ port_init(void)
     // Loop through 0 to NPORT-1, initialize status of kernal ports and
     // non-kernal ports. Make sure that all ports are empty.
 
-    // YOUR CODE HERE
+    // Iterate through all ports
+    for (int i = 0; i < NPORT; i++) { 
+        ports[i].head = 0;
+        ports[i].tail = 0;
+        ports[i].count = 0;
+
+        if (i <= PORT_DISKCMD) { // Predefined kernel ports
+            ports[i].free = 0;  // Kernel owned ports
+            ports[i].type = PORT_TYPE_KERNEL;
+        } else{
+            ports[i].free = 1;  // Free ports
+            ports[i].type = PORT_TYPE_FREE;
+        }
+    }
 }
 
 
@@ -167,7 +180,22 @@ port_close(int port)
     // Close the port.  If the port is not open, nothing will happen.  However,
     // if it is open, we empty its contents and mark it as free.
 
-    // YOUR CODE HERE
+
+    if (port < 0 || port >= NPORT) {
+        return; // Invalid port number
+    }
+    if (ports[port].free) {
+        return; // Port is already free
+    }
+
+    // Reset port fields to mark it as free and empty
+    ports[port].head = 0;
+    ports[port].owner =0;
+    ports[port].tail = 0;
+    ports[port].count = 0;
+    ports[port].free = 1; // Mark port as free
+    ports[port].type = PORT_TYPE_FREE;  
+
 }
 
 
@@ -185,8 +213,32 @@ port_acquire(int port, procid_t proc_id)
     // If this operation fails, return -1.
 
     // YOUR CODE HERE
-    
-    return -1;
+    if (port == -1) {
+        for (int i = 0; i < NPORT; i++) {
+            if (ports[i].free) {
+                ports[i].free = 0;
+                ports[i].owner = proc_id;
+                ports[i].type = PORT_TYPE_FREE;
+                return i; // Return the allocated port number
+            }
+        }
+        return -1; // No free port available
+    }
+
+    if (port < 0 || port >= NPORT) {
+        return -1; // Invalid port number
+    }
+
+    if (!ports[port].free) {
+        return -1; // Port is not available
+    }
+
+    // Mark the port as allocated
+    ports[port].free = 0;
+    ports[port].owner = proc_id;
+    ports[port].type = PORT_TYPE_FREE;
+    return port; // Return the allocated port number 
+
 }
 
 
@@ -201,7 +253,25 @@ port_write(int port, char *buf, int n)
     // write it.
 
     // YOUR CODE HERE
-    return -1;
+    if (port < 0 || port >= NPORT) {
+        return -1; // Invalid port number
+    }
+
+    if (ports[port].free) {
+        return -1; // Port is not open
+    }
+
+    int bytes_written = 0;
+
+    // Write to the buffer until we have written n bytes or the buffer is full
+    while (bytes_written < n && ports[port].count < PORT_BUF_SIZE) {
+        ports[port].buffer[ports[port].tail] = buf[bytes_written];
+        ports[port].tail = (ports[port].tail + 1) % PORT_BUF_SIZE;
+        ports[port].count++;
+        bytes_written++;
+    }
+
+    return bytes_written;
 }
 
 
@@ -215,7 +285,23 @@ port_read(int port, char *buf, int n)
     // Return the actual number of bytes you have read.
     // Be sure to update count as you read.
 
-    // YOUR CODE HERE
+    if (port < 0 || port >= NPORT) {
+        return -1; // Invalid port number
+    }
+    if (ports[port].free) {
+        return -1; // Port is not open
+    }
 
-    return -1;
+    int bytes_read = 0;
+
+    // Read from the buffer until we have read n bytes or the buffer is exhausted
+    while (bytes_read < n && ports[port].count > 0) {
+        buf[bytes_read] = ports[port].buffer[ports[port].head];
+        ports[port].head = (ports[port].head + 1) % PORT_BUF_SIZE;
+        ports[port].count--;
+        bytes_read++;
+    }
+
+    return bytes_read;
+
 }
